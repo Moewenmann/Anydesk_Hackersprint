@@ -3,6 +3,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 typedef char i8;
 typedef unsigned char u8;
@@ -55,6 +57,39 @@ struct file_content   read_entire_file(char* filename)
 	return (struct file_content){file_data, file_size};
 }
 
+
+void find_bgr_values(struct bmp_header *header, uint8_t *pixel_data)
+{
+	uint32_t width = header->width;
+	uint32_t height = header->height;
+	uint32_t row_stride = width * 4;
+	i32 cnt = 0;
+
+	for (uint32_t y = 0; y < height; y++)
+	{
+		for (uint32_t x = 0; x < width; x++)
+		{
+			uint8_t *pixel = pixel_data + y * row_stride + x * 4;
+			uint8_t blue = pixel[0];
+			uint8_t green = pixel[1];
+			uint8_t red = pixel[2];
+			uint8_t alpha = pixel[3];
+			
+			(void)alpha;
+			if (blue == 127 && green == 188 && red == 217)
+			{
+				printf("Pixel[%u, %u]: B=%u, G=%u, R=%u\n", x, height - 1 - y, blue, green, red);
+				cnt++;
+			}
+		}
+	}
+	printf("Number of pixels found: %i\n", cnt);
+	if (cnt < 14)
+		PRINT_ERROR("not enough pixels found for a message block!\n");
+	else
+		printf("enough pixels found for a message block!\n");
+}
+
 int main(int argc, char** argv)
 {
 	if (argc != 2)
@@ -70,5 +105,9 @@ int main(int argc, char** argv)
 	}
 	struct bmp_header* header = (struct bmp_header*) file_content.data;
 	printf("signature: %.2s\nfile_size: %u\ndata_offset: %u\ninfo_header_size: %u\nwidth: %u\nheight: %u\nplanes: %i\nbit_per_px: %i\ncompression_type: %u\ncompression_size: %u\n", header->signature, header->file_size, header->data_offset, header->info_header_size, header->width, header->height, header->number_of_planes, header->bit_per_pixel, header->compression_type, header->compressed_image_size);
+
+	uint8_t *pixel_data = (uint8_t *)(file_content.data + header->data_offset);
+	find_bgr_values(header, pixel_data);
+
 	return 0;
 }
