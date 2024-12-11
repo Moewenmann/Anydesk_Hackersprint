@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 typedef char i8;
 typedef unsigned char u8;
@@ -90,6 +91,81 @@ void find_bgr_values(struct bmp_header *header, uint8_t *pixel_data)
 		printf("enough pixels found for a message block!\n");
 }
 
+void decode_bgr(struct bmp_header *header, uint8_t *pixel_data)
+{
+	uint32_t width = header->width;
+	uint32_t height = header->height;
+	uint32_t row_stride = width * 4;
+	uint32_t msg_block_size = 0;
+	uint32_t corner_xy[2] = {0, 0};
+	i32 cnt = 0;
+
+	for (uint32_t y = 0; y < height; y++)
+	{
+		for (uint32_t x = 0; x < width; x++)
+		{
+			uint8_t *pixel = pixel_data + y * row_stride + x * 4;
+			uint8_t blue = pixel[0];
+			uint8_t green = pixel[1];
+			uint8_t red = pixel[2];
+			uint8_t alpha = pixel[3];
+			
+			(void)alpha;
+			if (blue == 127 && green == 188 && red == 217)
+			{
+				cnt++;
+				if (cnt == 7)
+				{
+					corner_xy[0] = x;
+					corner_xy[1] = height - 1 - y;
+					printf("Corner Pixel[%u, %u]: B=%u, G=%u, R=%u\n", x, height - 1 - y, blue, green, red);
+				}
+			}
+			else if (cnt == 14)
+			{
+				msg_block_size = blue + red;
+				printf("Size Pixel[%u, %u]: B=%u, G=%u, R=%u\n", x, height - 1 - y, blue, green, red);
+				printf("Message block size: %u\n", msg_block_size);
+				cnt = 0;
+				break;
+			}
+		}
+	}
+
+	i8 *msg_block = (i8 *)malloc((msg_block_size + 1) * sizeof(i8));
+	if (msg_block == NULL)
+	{
+		PRINT_ERROR("mem fail\n");
+		return;
+	}
+
+	uint32_t rdcnt = 0;
+	uint32_t y = corner_xy[1] - 2;
+	while (rdcnt < msg_block_size)
+	{
+		y--;
+		uint32_t x = corner_xy[0] + 2;
+		while (x != (corner_xy[0] + 2 + 6))
+		{
+			uint8_t *pixel = pixel_data + y * row_stride + x * 4;
+			i8 bc = pixel[0];
+			i8 gc = pixel[1];
+			i8 rc = pixel[2];
+			i8 alpha = pixel[3];
+			printf ("MEM: %c-%c-%c\n", bc, gc, rc);
+			(void)alpha;
+			rdcnt += 3;
+			x++;
+			if (x > corner_xy[0] + 22)
+			{
+				PRINT_ERROR("error while reading block\n");
+				break;
+			}
+		}
+	}
+	printf("read count: %u\n", rdcnt);
+}
+
 int main(int argc, char** argv)
 {
 	if (argc != 2)
@@ -108,6 +184,7 @@ int main(int argc, char** argv)
 
 	uint8_t *pixel_data = (uint8_t *)(file_content.data + header->data_offset);
 	find_bgr_values(header, pixel_data);
+	decode_bgr(header, pixel_data);
 
 	return 0;
 }
